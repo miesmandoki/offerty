@@ -1,7 +1,10 @@
-import { FC } from "react";
-import Image from "next/image";
+"use client";
+
+import { FC, useState, useEffect } from "react";
+import { useFirestore, useUser } from "reactfire";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import { MainNav } from "@/components/demo-dashboard/main-nav";
-import { RecentSales } from "@/components/demo-dashboard/recent-sales";
+import { ProposalsList } from "@/components/demo-dashboard/proposals-list";
 import {
   Card,
   CardHeader,
@@ -9,27 +12,93 @@ import {
   CardContent,
   CardDescription,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+
+type ProposalData = {
+  id: string;
+  clientName: string;
+  amount: string;
+  propertyType: string;
+  category: string;
+  workAddress: string;
+  status: string;
+  createdAt: any;
+};
 
 export const DemoDashboard: FC = () => {
+  const firestore = useFirestore();
+  const { data: user } = useUser();
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    acceptedValue: 0,
+    pendingValue: 0,
+    acceptedCount: 0,
+    pendingCount: 0,
+    needsAttentionCount: 0,
+    totalCount: 0,
+  });
+
+  useEffect(() => {
+    async function loadStats() {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const proposalsRef = collection(firestore, "proposals");
+        const proposalsQuery = query(
+          proposalsRef,
+          where("userId", "==", user.uid)
+        );
+        const querySnapshot = await getDocs(proposalsQuery);
+
+        let acceptedValue = 0;
+        let pendingValue = 0;
+        let acceptedCount = 0;
+        let pendingCount = 0;
+        let needsAttentionCount = 0;
+        let totalCount = 0;
+
+        querySnapshot.forEach((doc) => {
+          const data = doc.data() as ProposalData;
+          const amount = parseFloat(data.amount) || 0;
+
+          totalCount++;
+
+          if (data.status === "accepted") {
+            acceptedValue += amount;
+            acceptedCount++;
+          } else if (data.status === "draft") {
+            pendingValue += amount;
+            pendingCount++;
+
+            // Consider drafts as needing attention
+            needsAttentionCount++;
+          }
+        });
+
+        setStats({
+          acceptedValue,
+          pendingValue,
+          acceptedCount,
+          pendingCount,
+          needsAttentionCount,
+          totalCount,
+        });
+      } catch (error) {
+        console.error("Error loading proposals stats:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadStats();
+  }, [firestore, user]);
+
   return (
     <>
-      <div className="md:hidden">
-        <Image
-          src="/examples/dashboard-light.png"
-          width={1280}
-          height={866}
-          alt="Dashboard"
-          className="block dark:hidden"
-        />
-        <Image
-          src="/examples/dashboard-dark.png"
-          width={1280}
-          height={866}
-          alt="Dashboard"
-          className="hidden dark:block"
-        />
-      </div>
-      <div className="hidden flex-col md:flex">
+      <div className="flex-col md:flex">
         <div className="flex items-end justify-between space-y-2 mb-6">
           <h2 className="text-3xl leading-5 font-bold tracking-tight">
             Dashboard
@@ -43,7 +112,7 @@ export const DemoDashboard: FC = () => {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Total Revenue
+                  Värde godkända offerter
                 </CardTitle>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -59,16 +128,24 @@ export const DemoDashboard: FC = () => {
                 </svg>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">$45,231.89</div>
-                <p className="text-xs text-muted-foreground">
-                  +20.1% from last month
-                </p>
+                {loading ? (
+                  <Skeleton className="h-8 w-40" />
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">
+                      {stats.acceptedValue.toLocaleString("sv-SE")} SEK
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Från {stats.acceptedCount} godkända offerter
+                    </p>
+                  </>
+                )}
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Subscriptions
+                  Inväntar godkännande
                 </CardTitle>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -86,15 +163,26 @@ export const DemoDashboard: FC = () => {
                 </svg>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">+2350</div>
-                <p className="text-xs text-muted-foreground">
-                  +180.1% from last month
-                </p>
+                {loading ? (
+                  <Skeleton className="h-8 w-40" />
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">
+                      {stats.pendingCount}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Totalt värde: {stats.pendingValue.toLocaleString("sv-SE")}{" "}
+                      SEK
+                    </p>
+                  </>
+                )}
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Sales</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  Godkända offerter
+                </CardTitle>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 24 24"
@@ -110,16 +198,28 @@ export const DemoDashboard: FC = () => {
                 </svg>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">+12,234</div>
-                <p className="text-xs text-muted-foreground">
-                  +19% from last month
-                </p>
+                {loading ? (
+                  <Skeleton className="h-8 w-40" />
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">
+                      {stats.acceptedCount}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {stats.acceptedCount > 0
+                        ? `Snitt: ${Math.round(
+                            stats.acceptedValue / stats.acceptedCount
+                          ).toLocaleString("sv-SE")} SEK`
+                        : "Inga godkända offerter"}
+                    </p>
+                  </>
+                )}
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Active Now
+                  Behöver hanteras
                 </CardTitle>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -135,29 +235,35 @@ export const DemoDashboard: FC = () => {
                 </svg>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">+573</div>
-                <p className="text-xs text-muted-foreground">
-                  +201 since last hour
-                </p>
+                {loading ? (
+                  <Skeleton className="h-8 w-40" />
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">
+                      {stats.needsAttentionCount}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Inväntar svar
+                    </p>
+                  </>
+                )}
               </CardContent>
             </Card>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-            <Card className="col-span-4">
+          <div className="grid gap-4 grid-cols-7">
+            <Card className="col-span-7">
               <CardHeader>
-                <CardTitle>Overview</CardTitle>
-              </CardHeader>
-              <CardContent className="pl-2">{/* <Overview /> */}</CardContent>
-            </Card>
-            <Card className="col-span-3">
-              <CardHeader>
-                <CardTitle>Recent Sales</CardTitle>
+                <CardTitle>Senaste offerter</CardTitle>
                 <CardDescription>
-                  You made 265 sales this month.
+                  {loading ? (
+                    <Skeleton className="h-4 w-32" />
+                  ) : (
+                    `${stats.totalCount} aktiva offerter`
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <RecentSales />
+                <ProposalsList />
               </CardContent>
             </Card>
           </div>

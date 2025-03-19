@@ -7,15 +7,7 @@ export const Footer = () => {
         <div className="flex flex-col items-center gap-4 px-8 md:flex-row md:gap-2 md:px-0">
           <FishIcon />
           <p className="text-center text-sm leading-loose md:text-left">
-            An{" "}
-            <a
-              href="https://enesien.com"
-              target="_blank"
-              className="font-medium underline underline-offset-4"
-            >
-              enesien software
-            </a>{" "}
-            project.
+            Offerter som folk faktiskt signerar.
           </p>
         </div>
       </div>
